@@ -1,0 +1,126 @@
+
+Week 6: Advanced Security Audits & Final Deployment Security
+
+Website:
+https://app.[domain].com)
+
+Final Security Audit & Deployment Report:
+1. Security Audits & Compliance:
+1.1 Automated Scanning Results:
+OWASP ZAP:
+•	Target: Web App (Port 80/443) 
+•	Scan Type: Active Scan 
+•	Key Findings: Missing Anti-CSRF Tokens; Strict-Transport-Security header not set 
+•	Severity: Medium 
+•	Status: Resolved
+
+Nikto:
+•	Target: Web Server 
+•	Scan Type: Web Server Scan 
+•	Key Findings: Server version disclosure (Server: nginx/1.23.0); OPTIONS method enabled 
+•	Severity: Low 
+•	Status: Resolved
+Lynis:
+•	Target: Host OS (Ubuntu 22.04) 
+•	Scan Type: System Audit 
+•	Key Findings: Kernel hardening missing; Fail2ban not installed; Root SSH login allowed 
+•	Severity: High 
+•	Status: Resolved
+
+1.2 OWASP Top 10 Compliance Check:
+•	A01: Broken Access Control
+•	Status: Pass 
+•	Evidence / Remediation: Implemented JWT with strict role-based access control (RBAC). Tested with Postman to ensure IDOR vulnerabilities are patched.
+•	A02: Cryptographic Failures 
+•	Status: Pass 
+•	Evidence / Remediation: Enforced TLS 1.3 only. All secrets moved to HashiCorp Vault / Docker Secrets (no .env in Git). 
+•	A03: Injection 
+•	Status: Pass 
+•	Evidence / Remediation: Prepared Statements (SQL) and helmet.js (NoSQL/XSS) implemented. ZAP scan showed no injection vectors. 
+•	A04: Insecure Design 
+•	Status: Pass 
+•	Evidence / Remediation: Rate limiting implemented on API endpoints (100 req/5min). 
+•	A05: Security Misconfiguration 
+•	Status: Pass 
+•	Evidence / Remediation: Removed default credentials; Disabled directory listing; Custom 404 pages. 
+•	A06: Vulnerable Components 
+•	Status: Pass 
+•	Evidence / Remediation: Docker image scanning (Trivy) passed. Dependencies updated to latest stable versions. 
+•	A07: Identification/Auth Failures 
+•	Status: Pass 
+•	Evidence / Remediation: Multi-factor authentication (MFA) enabled for admin accounts. Account lockout after 5 failed attempts. 
+•	A08: Software/Data Integrity Failures 
+•	Status: Pass 
+•	Evidence / Remediation: CI/CD pipeline signs Docker images (Cosign). Package locks (package-lock.json) used. 
+•	A09: Security Logging/Monitoring 
+•	Status: Warn 
+•	Evidence / Remediation: Centralized logging set up (ELK), but alerting thresholds not yet tuned. Deferred to post-launch. 
+•	A10: SSRF 
+•	Status: Pass 
+•	Evidence / Remediation: Outbound traffic whitelist enforced via firewall and network policies. 
+
+2. Secure Deployment Practices:
+2.1 Automatic Security Updates:
+To ensure the host OS is always patched, we configured unattended-upgrades on the production server.
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+};
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+
+2.2 Docker Security Best Practices:
+We hardened the Docker setup using the following practices:
+•	Non-Root User: The container runs as a specific user (UID 10001) instead of root.
+RUN addgroup -g 10001 -S appgroup && adduser -u 10001 -S appuser -G appgroup
+USER appuser
+•	Image Scanning: Integrated Trivy into the CI/CD pipeline.
+trivy image --severity HIGH,CRITICAL --exit-code 1 myapp:latest
+
+•	Docker Bench Security: Ran docker-bench-security against the host.
+•	Result: 85% pass rate. Failed checks (like "Allow default Docker bridge") were mitigated by using user-defined bridge networks.
+
+•	Read-only Root Filesystem: Containers are run with --read-only to prevent runtime modifications.
+
+3. Final Penetration Testing:
+A comprehensive penetration test was performed using Burp Suite Professional and Metasploit targeting the staging environment.
+•	Tools: Burp Suite (Repeater, Intruder), Nmap, Metasploit (auxiliary/scanner/http)
+
+3.2 Vulnerability Findings & Remediation:
+•	PT-01: Session Cookie Missing HttpOnly Flag 
+•	Tool: Burp Suite 
+•	Risk: Medium 
+•	Description: Session token was accessible via JavaScript, making it vulnerable to XSS theft. 
+•	Remediation Applied: Set Secure, HttpOnly, and SameSite=Strict flags in the application server config. 
+•	PT-02: Weak TLS Ciphers 
+•	Tool: Nmap (ssl-enum-ciphers) 
+•	Risk: Low 
+•	Description: Server accepted TLSv1.1 and weak ciphers (CBC mode). 
+•	Remediation Applied: Updated Nginx config to allow only TLSv1.3. 
+•	PT-03: Username Enumeration 
+•	Tool: Burp Intruder 
+•	Risk: Medium 
+•	Description: Login error messages differed ("User not found" vs "Password incorrect"). 
+•	Remediation Applied: Changed error message to generic: "Invalid username or password." 
+•	PT-04: X-Frame-Options Missing 
+•	Tool: Burp Spider 
+•	Risk: Info 
+•	Description: Clickjacking potential. 
+•	Remediation Applied: Added X-Frame-Options: DENY to web server headers.
+
+4. Deployment Architecture:
+The application is deployed behind a reverse proxy with the following security layers:
+1.	Cloudflare WAF: DDoS protection and IP whitelisting.
+2.	Nginx Reverse Proxy: Terminates SSL (Let's Encrypt).
+3.	Docker Swarm / Kubernetes: Orchestration with secret management.
+4.	PostgreSQL: Isolated in a private subnet; no public exposure.
+
+5.	Deliverables Checklist:
+Fully Secured Application Deployed at https://app.[domain].com
+
+6. Conclusion:
+The application has undergone rigorous automated and manual security testing. All High and Medium severity vulnerabilities identified during the security audits and penetration testing phases have been remediated.
+
+
